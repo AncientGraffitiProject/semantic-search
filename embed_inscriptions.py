@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 import chromadb
 from chromadb.config import DEFAULT_TENANT, DEFAULT_DATABASE, Settings
 from sentence_transformers import SentenceTransformer

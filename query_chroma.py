@@ -1,5 +1,4 @@
 import chromadb
-import numpy as np
 from sentence_transformers import SentenceTransformer
 from chromadb.config import DEFAULT_TENANT, DEFAULT_DATABASE, Settings
 from googletrans import Translator
