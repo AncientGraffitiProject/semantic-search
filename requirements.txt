@@ -1,3 +1,10 @@
+pandas
+numpy
 chromadb
 sentence_transformers
+typing
+logging
+re
+asyncio
+unicodedata
 googletrans
