@@ -7,6 +7,9 @@ import logging
 from typing import List, Dict, Set
 from latin_preprocessor import LatinTextPreprocessor
 import asyncio
+import os
+from dotenv import load_dotenv
+import google.generativeai as genai
 
 import translator_test
 
@@ -14,18 +17,19 @@ import translator_test
 
 # TODO Try only using certain parts of the code to see if it makes a measurable improvement.
 
-#TODO put in Llama 3.2 or a small 4 one to rerank the results.
-
 #COLLECTION_NAME = "latin_agp_inscriptions"
 COLLECTION_NAME = "1964_latin_agp_inscriptions"
 MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"  # Updated to better model
 DB_CHROMA_PATH = "db_chroma"
 
+# Load environment variables
+load_dotenv()
+
 # Enhanced search parameters
 SEMANTIC_DISTANCE_THRESHOLD = 0.5  # Kinda strict threshold for better results
 KEYWORD_BOOST_FACTOR = 0.2  # If the keyword is in the inscription, boost the score
-TOP_K_INITIAL = 100  # Get more candidates for re-ranking
-TOP_K_FINAL = 50   # Final results to show
+TOP_K_INITIAL = 70  # Get more candidates for re-ranking
+TOP_K_FINAL = 30   # Final results to show
 
 class EnhancedLatinQuerySystem:
     """
@@ -43,6 +47,7 @@ class EnhancedLatinQuerySystem:
         # Initialize components so you can search multiple times
         self._initialize_model()
         self._initialize_chroma()
+        self._initialize_gemini()
         
     
     def _initialize_model(self):
@@ -62,6 +67,127 @@ class EnhancedLatinQuerySystem:
             database=DEFAULT_DATABASE
         )
         self.collection = self.client.get_collection(name=COLLECTION_NAME)
+    
+    def _initialize_gemini(self):
+        """Initialize Gemini LLM."""
+        try:
+            api_key = os.getenv('GEMINI_API_KEY')
+            if api_key:
+                genai.configure(api_key=api_key)
+                self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                self.gemini_available = True
+                print("Gemini LLM initialized for reranking")
+            else:
+                self.gemini_available = False
+                print("No GEMINI_API_KEY found - no LLM reranking")
+        except Exception as e:
+            self.gemini_available = False
+            print(f"Gemini initialization failed: {e} - no LLM reranking")
+
+    def _llm_rerank(self, results: List[Dict], query: str) -> List[Dict]:
+        """Use Gemini to rerank search results based on relevance."""
+        # Skips the rest of this function if there is nothing to do.
+        if not self.gemini_available or len(results) == 0:
+            return results
+        
+        try:
+            # Prepare data for LLM
+            results_for_llm = []
+            for i, (agp_id, result_data) in enumerate(results):
+                metadata = result_data['metadata']
+                results_for_llm.append({
+                    'index': i,
+                    'agp_id': agp_id,
+                    'latin_text': metadata.get('latin_text', ''),
+                    'semantic_score': result_data.get('semantic_score', 0),
+                    'keyword_score': result_data.get('keyword_score', 0),
+                    'match_type': result_data.get('match_type', '')
+                })
+            
+            # Create prompt for Gemini
+            prompt = f"""You are an expert in Latin epigraphy and ancient inscriptions. 
+Analyze these search results for the query: "{query}"
+
+Your task is to filter and rerank the results. You should:
+1. Exclude any inscriptions that are completely unrelated to the query concept or theme
+2. Keep inscriptions with direct word matches, semantic connections, or thematic relevance
+3. Rank the remaining relevant results by their importance to the query
+
+For example:
+- If query is "amat" (love), Keep: amor, Venus, marriage, flowers, beauty, passion
+- If query is "amat" (love), Exclude: communem (common), random names with no love context
+- If query is "victoria" (victory), Keep: triumph, conquest, military terms, success
+- If query is "victoria" (victory), Exclude: unrelated personal names or everyday activities
+
+Evaluation criteria (in order of importance):
+1. Direct semantic relationship to the query concept
+2. Thematic or cultural connection (e.g., Venus relates to love, laurel relates to victory)
+3. Historical context relevance
+4. Exact word matches (but only if contextually appropriate)
+
+Results to evaluate:
+"""
+            # Add each inscription to the prompt along with the scores that I calculated
+            for item in results_for_llm:
+                prompt += f"\n{item['index']}. ID: {item['agp_id']}\n"
+                prompt += f"   Latin: {item['latin_text']}\n"
+                prompt += f"   Scores: Semantic={item['semantic_score']:.3f}, Keyword={item['keyword_score']:.3f}\n"
+            
+            prompt += f"""
+Return only the indices of relevant inscriptions as a comma-separated list, ranked by relevance (most relevant first).
+Exclude completely unrelated entries. If no results are relevant, return an empty response.
+Example format: 2,0,5,1 (only include relevant indices)
+
+Your filtered ranking:"""
+            
+            # Get Gemini response
+            response = self.gemini_model.generate_content(prompt)
+            ranking_text = response.text.strip()
+            
+            # Parse the ranking
+            try:
+                ranking_text = ranking_text.strip()
+                
+                # Handle empty response (no relevant results)
+                if not ranking_text or ranking_text.lower() in ['none', 'empty', 'no results']:
+                    print("LLM filtered out all results as irrelevant")
+                    return []
+                
+                
+                # Validate the indeces
+                indices = [int(x.strip()) for x in ranking_text.split(',') if x.strip()]
+                valid_indices = [i for i in indices if 0 <= i < len(results)]
+                
+                # Add any missing indices at the end for if there are high-scoring keyword matches that the LLM might have overlooked
+                missing_indices = []
+                for i, (agp_id, result_data) in enumerate(results):
+                    if i not in valid_indices:
+                        # Include if it has a very high keyword score
+                        if result_data.get('keyword_score', 0) >= 1.5:
+                            missing_indices.append(i)
+                
+                # Add missing high-relevance results at the end
+                valid_indices.extend(missing_indices[:3])  # Only 3 additional results so it doesn't undo everthing
+                
+                # Reorder results based on LLM ranking
+                reranked_results = []
+                for idx in enumerate(valid_indices):
+                    if idx < len(results):
+                        agp_id, result_data = results[idx]
+                        result_data['llm_reranked'] = True
+                        reranked_results.append((agp_id, result_data))
+                
+                filtered_count = len(results) - len(reranked_results)
+                print(f"LLM reranked {len(reranked_results)} results (filtered out {filtered_count} irrelevant)")
+                return reranked_results
+                
+            except (ValueError, IndexError) as e:
+                print(f"Couldn't parse LLM ranking: {e}")
+                return results
+                
+        except Exception as e:
+            print(f"LLM reranking failed: {e}")
+            return results   
     
     def _enhanced_tokenize(self, text: str) -> Set[str]:
         """Advanced tokenization with Latin-specific features."""
@@ -199,7 +325,8 @@ class EnhancedLatinQuerySystem:
                 'keyword_score': 0,
                 'combined_score': semantic_score,
                 'distance': distance,
-                'match_type': 'semantic'
+                'match_type': 'semantic',
+                'llm_reranked': False
             }
         
         # Add keyword scores and boost matches
@@ -220,7 +347,8 @@ class EnhancedLatinQuerySystem:
                     'keyword_score': keyword_data['score'],
                     'combined_score': keyword_data['score'] * 0.8,  # Slightly lower weight for pure keyword since just because it has the same word doesn't mean it is relevant.
                     'distance': 1.0,  # Max distance for keyword-only
-                    'match_type': 'keyword'
+                    'match_type': 'keyword',
+                    'llm_reranked': False
                 }
         
         # Sort by combined score and only keep the top K results
@@ -230,7 +358,12 @@ class EnhancedLatinQuerySystem:
             reverse=True
         )
         
-        return sorted_results[:TOP_K_FINAL]
+        initial_results = sorted_results[:TOP_K_FINAL]
+        
+        # Apply LLM reranking
+        final_results = self._llm_rerank(initial_results, query)
+        
+        return final_results
     
     def _format_result(self, agp_id: str, result_data: Dict, rank: int) -> None:
         """Format the search result with translation."""
@@ -273,6 +406,8 @@ class EnhancedLatinQuerySystem:
         keyword_matches = self._keyword_search(query)
         
         print("Re-ranking and combining results...")
+        if self.gemini_available:
+            print("Applying LLM reranking...")
         final_results = self._rerank_results(semantic_results, keyword_matches, query)
         
         # Display results
@@ -289,11 +424,14 @@ class EnhancedLatinQuerySystem:
         semantic_count = len([r for _, r in final_results if r['match_type'] in ['semantic', 'hybrid']])
         keyword_count = len([r for _, r in final_results if r['match_type'] in ['keyword', 'hybrid']])
         hybrid_count = len([r for _, r in final_results if r['match_type'] == 'hybrid'])
+        llm_reranked_count = len([r for _, r in final_results if r.get('llm_reranked', False)])
         
         print(f"\nSearch Statistics:")
         print(f"- Semantic matches: {semantic_count}")
         print(f"- Keyword matches: {keyword_count}")
         print(f"- Hybrid matches: {hybrid_count}")
+        if self.gemini_available:
+            print(f"- LLM reranked results: {llm_reranked_count}")
 
 def main():
     """Puts everything together with a user-friendly interface."""
