@@ -9,5 +9,6 @@ asyncio
 unicodedata
 googletrans
 google.generativeai
-dotenv
-os
+python-dotenv
+tabulate
+textwrap

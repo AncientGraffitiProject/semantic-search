@@ -10,15 +10,29 @@ import asyncio
 import os
 from dotenv import load_dotenv
 import google.generativeai as genai
+from tabulate import tabulate
+import textwrap
+import sys
+import io
 
 import translator_test
 
-# Interesting ones to look at: Obiit, Victoria, amor, αγάπη, medicamentum, donum, urbe, in forma navis scriptum, Quam mita vis Pastores atque Caste monit erga pugiles
+# Very good ones to look at: Obiit, Victoria, amor, αγάπη, medicamentum, donum, urbe, in forma navis scriptum, Κίνναμοϲ
+
+# TODO Find the limitations better
 
 # TODO Try only using certain parts of the code to see if it makes a measurable improvement.
 
+# TODO If the LLM filters out all results return none.
+
+# Priority TODOs:
+
+# TODO check on the model of the LLM and make sure it is the best one available.
+
+# TODO put results in table format.
+
 #COLLECTION_NAME = "latin_agp_inscriptions"
-COLLECTION_NAME = "1964_latin_agp_inscriptions"
+COLLECTION_NAME = "latin_and_greek_inscriptions"
 MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"  # Updated to better model
 DB_CHROMA_PATH = "db_chroma"
 
@@ -28,8 +42,8 @@ load_dotenv()
 # Enhanced search parameters
 SEMANTIC_DISTANCE_THRESHOLD = 0.5  # Kinda strict threshold for better results
 KEYWORD_BOOST_FACTOR = 0.2  # If the keyword is in the inscription, boost the score
-TOP_K_INITIAL = 70  # Get more candidates for re-ranking
-TOP_K_FINAL = 30   # Final results to show
+TOP_K_INITIAL = 100  # Get more candidates for re-ranking
+TOP_K_FINAL = 25   # Final results to show
 
 class EnhancedLatinQuerySystem:
     """
@@ -74,9 +88,9 @@ class EnhancedLatinQuerySystem:
             api_key = os.getenv('GEMINI_API_KEY')
             if api_key:
                 genai.configure(api_key=api_key)
-                self.gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+                self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
                 self.gemini_available = True
-                print("Gemini LLM initialized for reranking")
+                print("Gemini initialized for reranking")
             else:
                 self.gemini_available = False
                 print("No GEMINI_API_KEY found - no LLM reranking")
@@ -105,7 +119,7 @@ class EnhancedLatinQuerySystem:
                 })
             
             # Create prompt for Gemini
-            prompt = f"""You are an expert in Latin epigraphy and ancient inscriptions. 
+            prompt = f"""You are an expert in Ancient Greek and Latin, epigraphy, and ancient inscriptions. 
 Analyze these search results for the query: "{query}"
 
 Your task is to filter and rerank the results. You should:
@@ -119,6 +133,8 @@ For example:
 - If query is "victoria" (victory), Keep: triumph, conquest, military terms, success
 - If query is "victoria" (victory), Exclude: unrelated personal names or everyday activities
 
+Make sure not to prioritize results based off the language that the query is in, but rather the meaning of all the words and their relevance to the query.
+
 Evaluation criteria (in order of importance):
 1. Direct semantic relationship to the query concept
 2. Thematic or cultural connection (e.g., Venus relates to love, laurel relates to victory)
@@ -130,7 +146,7 @@ Results to evaluate:
             # Add each inscription to the prompt along with the scores that I calculated
             for item in results_for_llm:
                 prompt += f"\n{item['index']}. ID: {item['agp_id']}\n"
-                prompt += f"   Latin: {item['latin_text']}\n"
+                prompt += f"   Latin or Greek: {item['latin_text']}\n"
                 prompt += f"   Scores: Semantic={item['semantic_score']:.3f}, Keyword={item['keyword_score']:.3f}\n"
             
             prompt += f"""
@@ -171,7 +187,7 @@ Your filtered ranking:"""
                 
                 # Reorder results based on LLM ranking
                 reranked_results = []
-                for idx in enumerate(valid_indices):
+                for idx in valid_indices:
                     if idx < len(results):
                         agp_id, result_data = results[idx]
                         result_data['llm_reranked'] = True
@@ -365,32 +381,80 @@ Your filtered ranking:"""
         
         return final_results
     
-    def _format_result(self, agp_id: str, result_data: Dict, rank: int) -> None:
-        """Format the search result with translation."""
-        metadata = result_data['metadata']
-        latin_text = metadata['latin_text']
+    def _get_translation(self, latin_text: str) -> str:
+        """Get translation for Latin text synchronously."""
+        try:
+            # Run the async translation function
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Redirect stdout to capture the translation
+            old_stdout = sys.stdout
+            sys.stdout = captured_output = io.StringIO()
+            
+            loop.run_until_complete(translator_test.translate_text(latin_text))
+            translation = captured_output.getvalue().strip()
+                    
+            sys.stdout = old_stdout
+            loop.close()
+            
+            return translation
+            
+        except Exception as e:
+            return f"Translation error: {str(e)[:30]}..."
+    
+    def _wrap_text(self, text: str, width: int) -> str:
+        """Wrap text to specified width."""
+        if not text:
+            return ""
+        return '\n'.join(textwrap.wrap(text, width=width))
+    
+    def _format_results_table(self, results: List[tuple]) -> None:
+        """Format results as a table."""
+        if not results:
+            print("No results found.")
+            return
         
-        # Format output
-        print(f"{rank}. agpID: {agp_id}")
-        print(f"    Text: {latin_text}")
+        # Prepare table data
+        table_data = []
+        headers = ["Rank", "agpID", "Text", "Match Type", "Semantic Score", "Translation"]
         
-        if result_data['match_type'] != 'keyword':
-            print(f"    Semantic Score: {result_data['semantic_score']:.4f}")
+        for rank, (agp_id, result_data) in enumerate(results, 1):
+            metadata = result_data['metadata']
+            latin_text = metadata['latin_text']
+            
+            # Get translation
+            translation = self._get_translation(latin_text)
+            
+            # Wrap text for better display - adjust width based on content
+            text_width = min(30, max(15, len(latin_text) // 2))
+            translation_width = min(35, max(20, len(translation) // 2))
+            
+            wrapped_text = self._wrap_text(latin_text, text_width)
+            wrapped_translation = self._wrap_text(translation, translation_width)
+            
+            # Format semantic score - always show it
+            if result_data['semantic_score'] == 0:
+                semantic_score = "N/A"
+            else:
+                semantic_score = f"{result_data['semantic_score']:.4f}"
+            
+            # Format match type
+            match_type = result_data['match_type'].upper()
+            
+            table_data.append([
+                rank,
+                agp_id,
+                wrapped_text,
+                match_type,
+                semantic_score,
+                wrapped_translation
+            ])
         
-        if result_data['keyword_score'] > 0:
-            print(f"    Keyword Score: {result_data['keyword_score']:.4f}")
-        
-        print(f"    Match Type: {result_data['match_type'].upper()}")
-        print(f"    Translation: ")
-        asyncio.run(translator_test.translate_text(latin_text))
-        
-        # Add semantic tags if available
-        if 'semantic_tags' in metadata and metadata['semantic_tags']:
-            print(f"    Categories: {metadata['semantic_tags']}")
-        
-        print("----------------------------")
-        
-        return
+        # Print table
+        print(f"\n=== Top {len(results)} Results ===")
+        print(tabulate(table_data, headers=headers, tablefmt="grid", stralign="left"))
+        print()  # Add extra line for readability
     
     def search(self, query: str) -> None:
         """Main search function with enhanced capabilities."""
@@ -410,28 +474,22 @@ Your filtered ranking:"""
             print("Applying LLM reranking...")
         final_results = self._rerank_results(semantic_results, keyword_matches, query)
         
-        # Display results
-        if not final_results:
-            print("No results found.")
-            return
-        
-        print(f"\n=== Top {len(final_results)} Results ===")
-        
-        for rank, (agp_id, result_data) in enumerate(final_results, 1):
-            self._format_result(agp_id, result_data, rank)
+        # Display results using table format
+        self._format_results_table(final_results)
         
         # Display search statistics
-        semantic_count = len([r for _, r in final_results if r['match_type'] in ['semantic', 'hybrid']])
-        keyword_count = len([r for _, r in final_results if r['match_type'] in ['keyword', 'hybrid']])
-        hybrid_count = len([r for _, r in final_results if r['match_type'] == 'hybrid'])
-        llm_reranked_count = len([r for _, r in final_results if r.get('llm_reranked', False)])
-        
-        print(f"\nSearch Statistics:")
-        print(f"- Semantic matches: {semantic_count}")
-        print(f"- Keyword matches: {keyword_count}")
-        print(f"- Hybrid matches: {hybrid_count}")
-        if self.gemini_available:
-            print(f"- LLM reranked results: {llm_reranked_count}")
+        if final_results:
+            semantic_count = len([r for _, r in final_results if r['match_type'] in ['semantic', 'hybrid']])
+            keyword_count = len([r for _, r in final_results if r['match_type'] in ['keyword', 'hybrid']])
+            hybrid_count = len([r for _, r in final_results if r['match_type'] == 'hybrid'])
+            llm_reranked_count = len([r for _, r in final_results if r.get('llm_reranked', False)])
+            
+            print(f"\nSearch Statistics:")
+            print(f"- Semantic matches: {semantic_count}")
+            print(f"- Keyword matches: {keyword_count}")
+            print(f"- Hybrid matches: {hybrid_count}")
+            if self.gemini_available:
+                print(f"- LLM reranked results: {llm_reranked_count}")
 
 def main():
     """Puts everything together with a user-friendly interface."""
