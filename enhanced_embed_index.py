@@ -7,9 +7,10 @@ from typing import List, Dict
 import logging
 from latin_preprocessor import LatinTextPreprocessor
 
-CSV_PATH = "Combined_inscriptions.csv"  # Path to your CSV file
+CSV_PATH = "4031_inscriptions.csv"  # Path to your CSV file
+#CSV_PATH = "Combined_inscriptions.csv"  # Path to your CSV file
 # CSV_PATH = "1964_inscriptions.csv"
-COLLECTION_NAME = "latin_and_greek_inscriptions"
+COLLECTION_NAME = "4031_line_inscriptions"
 
 # Enhanced model selection - try multiple models for best results
 MODELS = [

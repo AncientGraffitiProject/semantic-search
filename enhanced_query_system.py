@@ -15,9 +15,17 @@ import textwrap
 import sys
 import io
 
+
 import translator_test
 
-# Very good ones to look at: Obiit, Victoria, amor, αγάπη, medicamentum, donum, urbe, in forma navis scriptum, Κίνναμοϲ
+# Add irrelevant results from the LLM
+
+# Find words that are similar to the query so that it can look fo other ones.
+
+# potentially embed all of the words individually.
+
+# Very good ones to look at: Obiit, Victoria, amor, αγάπη, lover, amat, medicamentum, donum, urbe, in forma navis scriptum, city, stupid
+# Good ones: Κίνναμοϲ, piscator, scripsit, carmina, medicine, happy, fool, hominis/vale, numini
 
 # TODO Find the limitations better
 
@@ -32,7 +40,8 @@ import translator_test
 # TODO put results in table format.
 
 #COLLECTION_NAME = "latin_agp_inscriptions"
-COLLECTION_NAME = "latin_and_greek_inscriptions"
+#COLLECTION_NAME = "latin_and_greek_inscriptions"
+COLLECTION_NAME = "4031_line_inscriptions"
 MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"  # Updated to better model
 DB_CHROMA_PATH = "db_chroma"
 
@@ -150,11 +159,11 @@ Results to evaluate:
                 prompt += f"   Scores: Semantic={item['semantic_score']:.3f}, Keyword={item['keyword_score']:.3f}\n"
             
             prompt += f"""
-Return only the indices of relevant inscriptions as a comma-separated list, ranked by relevance (most relevant first).
+MAKE SURE to only return  the indices of relevant inscriptions as a comma-separated list, ranked by relevance (most relevant first).
 Exclude completely unrelated entries. If no results are relevant, return an empty response.
 Example format: 2,0,5,1 (only include relevant indices)
 
-Your filtered ranking:"""
+Your filtered and ranked indices:"""
             
             # Get Gemini response
             response = self.gemini_model.generate_content(prompt)
