@@ -18,30 +18,10 @@ import io
 
 import translator_test
 
-# Add irrelevant results from the LLM
-
-# Find words that are similar to the query so that it can look fo other ones.
-
-# potentially embed all of the words individually.
-
 # Very good ones to look at: Obiit, Victoria, amor, αγάπη, lover, amat, medicamentum, donum, urbe, in forma navis scriptum, city, stupid
 # Good ones: Κίνναμοϲ, piscator, scripsit, carmina, medicine, happy, fool, hominis/vale, numini
 
-# TODO Find the limitations better
-
-# TODO Try only using certain parts of the code to see if it makes a measurable improvement.
-
-# TODO If the LLM filters out all results return none.
-
-# Priority TODOs:
-
-# TODO check on the model of the LLM and make sure it is the best one available.
-
-# TODO put results in table format.
-
-#COLLECTION_NAME = "latin_agp_inscriptions"
-#COLLECTION_NAME = "latin_and_greek_inscriptions"
-COLLECTION_NAME = "4031_line_inscriptions"
+COLLECTION_NAME = "latin_and_greek_inscriptions"
 MODEL_NAME = "paraphrase-multilingual-mpnet-base-v2"  # Updated to better model
 DB_CHROMA_PATH = "db_chroma"
 

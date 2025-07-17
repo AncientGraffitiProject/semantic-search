@@ -1,5 +1,3 @@
-# Credit goes to Chatgpt for the code below.
-# I didn't know how to preprocess Latin text for embedding, so I asked chatgpt-4o-mini-high.
 import re
 import unicodedata
 from typing import List, Dict, Set

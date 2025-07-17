@@ -26,5 +26,6 @@ async def translate_text(phrase):
                 output = re.sub(r'\s+', ' ', result.text).strip()
                 print("    " + output)
             except:
+                # If translation fails, return a placeholder
                 print("    Translation unavailable")
 
