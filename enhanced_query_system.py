@@ -5,7 +5,7 @@ from chromadb.config import DEFAULT_TENANT, DEFAULT_DATABASE, Settings
 import re
 import logging
 from typing import List, Dict, Set
-from latin_preprocessor import LatinTextPreprocessor
+from AGP_Vector_Search.preprocessor import LatinTextPreprocessor
 import asyncio
 import os
 from dotenv import load_dotenv

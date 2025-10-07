@@ -5,7 +5,7 @@ from chromadb.config import DEFAULT_TENANT, DEFAULT_DATABASE, Settings
 from sentence_transformers import SentenceTransformer
 from typing import List, Dict
 import logging
-from latin_preprocessor import LatinTextPreprocessor
+from AGP_Vector_Search.preprocessor import LatinTextPreprocessor
 
 CSV_PATH = "Combined_inscriptions.csv"  # Path to your CSV file
 COLLECTION_NAME = "latin_and_greek_inscriptions"

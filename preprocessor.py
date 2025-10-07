@@ -18,7 +18,6 @@ class LatinTextPreprocessor:
             'H': 'HIC',
             'S': 'SITUS',
             'E': 'EST',
-            'T': 'TITULUS',
             'F': 'FILIUS',
             'L': 'LIBERTUS',
             'C': 'GAIUS',
@@ -33,14 +32,6 @@ class LatinTextPreprocessor:
             'SP': 'SPURIUS',
             'SER': 'SERVIUS',
             'D': 'DECIMUS',
-            'K': 'KAESO',
-            'MAM': 'MAMERCUS',
-            'AP': 'APPIUS',
-            'N': 'NUMERIUS',
-            'V': 'VIBIUS',
-            'VOL': 'VOLUSUS',
-            'POST': 'POSTUMUS',
-            'AG': 'AGRIPPA',
             'COS': 'CONSUL',
             'IMP': 'IMPERATOR',
             'CAES': 'CAESAR',
@@ -56,14 +47,32 @@ class LatinTextPreprocessor:
             'QUAEST': 'QUAESTOR'
         }
         
-        # Common Latin words for semantic context
+        # Common Latin and Greek words for semantic context
         self.semantic_markers = {
-            'death': ['OBIIT', 'MORTUUS', 'DEFUNCTUS', 'VITA', 'EXCESSIT'],
-            'dedication': ['DEDICAVIT', 'POSUIT', 'FECIT', 'FACIUNDUM'],
-            'family': ['FILIUS', 'FILIA', 'PATER', 'MATER', 'UXOR', 'MARITUS'],
-            'religious': ['SACRUM', 'DIS', 'DEUS', 'DIVUS', 'TEMPLUM'],
-            'official': ['CONSUL', 'PRAETOR', 'TRIBUNUS', 'LEGATUS', 'PROCONSUL'],
-            'memorial': ['MONUMENTUM', 'SEPULCRUM', 'TUMULUS', 'MEMORIA']
+            'death': [
+                'OBIIT', 'MORTUUS', 'DEFUNCTUS', 'VITA', 'EXCESSIT',
+                'ΤΕΤΕΛΕΥΤΗΚΕΝ', 'ΑΠΕΒΙΩΣΕΝ', 'ΘΑΝΑΤΟΣ', 'ΒΙΟΣ', 'ΕΞΕΛΙΠΕΝ'
+            ],
+            'dedication': [
+                'DEDICAVIT', 'POSUIT', 'FECIT', 'FACIUNDUM',
+                'ΑΝΕΘΗΚΕΝ', 'ΕΠΟΙΗΣΕΝ', 'ΑΝΕΓΡΑΨΕΝ', 'ΑΝΕΣΤΗΣΕΝ'
+            ],
+            'family': [
+                'FILIUS', 'FILIA', 'PATER', 'MATER', 'UXOR', 'MARITUS',
+                'ΥΙΟΣ', 'ΘΥΓΑΤΗΡ', 'ΠΑΤΗΡ', 'ΓΥΝΗ'
+            ],
+            'religious': [
+                'SACRUM', 'DIS', 'DEUS', 'DIVUS', 'TEMPLUM',
+                'ΘΕΟΣ', 'ΔΙΟΣ', 'ΝΑΟΣ', 'ΑΓΙΟΣ'
+            ],
+            'official': [
+                'CONSUL', 'PRAETOR', 'TRIBUNUS', 'LEGATUS', 'PROCONSUL',
+                'ΥΠΑΤΟΣ', 'ΣΤΡΑΤΗΓΟΣ', 'ΤΡΙΒΟΥΝΟΣ', 'ΛΕΓΑΤΟΣ', 'ΑΝΘΥΠΑΤΟΣ'
+            ],
+            'memorial': [
+                'MONUMENTUM', 'SEPULCRUM', 'TUMULUS', 'MEMORIA',
+                'ΤΑΦΟΣ', 'ΤΥΜΒΟΣ'
+            ]
         }
     
     def normalize_text(self, text: str) -> str:
@@ -129,10 +138,10 @@ class LatinTextPreprocessor:
         
         # Add query expansion for common search terms
         query_expansions = {
-            'DEATH': 'DEATH OBIIT MORTUUS DEFUNCTUS',
-            'FAMILY': 'FAMILY FILIUS FILIA PATER MATER',
-            'EMPEROR': 'EMPEROR CAESAR AUGUSTUS IMPERATOR',
-            'DEDICATION': 'DEDICATION POSUIT FECIT DEDICAVIT'
+            'DEATH': 'DEATH OBIIT MORTUUS DEFUNCTUS ΤΕΤΕΛΕΥΤΗΚΕΝ ΑΠΕΒΙΩΣΕΝ ΘΑΝΑΤΟΣ',
+            'FAMILY': 'FAMILY FILIUS FILIA PATER MATER ΥΙΟΣ ΘΥΓΑΤΗΡ ΠΑΤΗΡ',
+            'EMPEROR': 'EMPEROR CAESAR AUGUSTUS IMPERATOR ΚΑΙΣΑΡ ΑΥΓΟΥΣΤΟΣ ΑΥΤΟΚΡΑΤΩΡ',
+            'DEDICATION': 'DEDICATION POSUIT FECIT DEDICAVIT ΑΝΕΘΗΚΕΝ ΕΠΟΙΗΣΕΝ'
         }
         
         for key, expansion in query_expansions.items():
